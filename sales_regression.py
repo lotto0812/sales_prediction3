@@ -108,8 +108,10 @@ print(f"  y_log shape: {y_log.shape}")
 
 # データ分割
 print("\n[4/8] データを分割しています...")
-X_train, X_test, y_train_log, y_test_log, y_train_original, y_test_original = train_test_split(
-    X, y_log, y_original, test_size=0.2, random_state=42
+# インデックスも分割して、後で店舗情報を取得できるようにする
+indices = np.arange(len(X))
+X_train, X_test, y_train_log, y_test_log, y_train_original, y_test_original, train_indices, test_indices = train_test_split(
+    X, y_log, y_original, indices, test_size=0.2, random_state=42
 )
 print(f"  Train: {X_train.shape[0]}店舗")
 print(f"  Test: {X_test.shape[0]}店舗")
@@ -342,6 +344,21 @@ results_summary = pd.DataFrame({
 results_summary.to_csv(os.path.join(results_folder, 'model_comparison.csv'), index=False, encoding='utf-8-sig')
 print("\n  モデル比較結果を保存しました: model_comparison.csv")
 
+# テストデータの店舗情報を取得（グラフのホバー表示用）
+test_info = df_clean.iloc[test_indices].copy()
+store_names = test_info['RST_TITLE'].values if 'RST_TITLE' in test_info.columns else ['N/A'] * len(test_indices)
+cities = test_info['CITY'].values if 'CITY' in test_info.columns else ['N/A'] * len(test_indices)
+cuisine_types = test_info['CUISINE_CAT_origin'].values if 'CUISINE_CAT_origin' in test_info.columns else ['N/A'] * len(test_indices)
+store_clusters = test_info['store_cluster'].values
+cuisine_clusters = test_info['cuisine_cluster_id'].values
+num_seats = test_info['NUM_SEATS'].values if 'NUM_SEATS' in test_info.columns else [0] * len(test_indices)
+avg_population = test_info['AVG_MONTHLY_POPULATION'].values if 'AVG_MONTHLY_POPULATION' in test_info.columns else [0] * len(test_indices)
+dinner_price = test_info['DINNER_PRICE'].values if 'DINNER_PRICE' in test_info.columns else [0] * len(test_indices)
+lunch_price = test_info['LUNCH_PRICE'].values if 'LUNCH_PRICE' in test_info.columns else [0] * len(test_indices)
+is_family = test_info['IS_FAMILY_FRIENDLY'].values if 'IS_FAMILY_FRIENDLY' in test_info.columns else [0] * len(test_indices)
+is_friend = test_info['IS_FRIEND_FRIENDLY'].values if 'IS_FRIEND_FRIENDLY' in test_info.columns else [0] * len(test_indices)
+is_alone = test_info['IS_ALONE_FRIENDLY'].values if 'IS_ALONE_FRIENDLY' in test_info.columns else [0] * len(test_indices)
+
 # 予測結果を保存
 test_results = pd.DataFrame({
     'actual': y_test_original,
@@ -378,7 +395,25 @@ fig_lgb.add_trace(
         mode='markers',
         marker=dict(size=5, color='blue', opacity=0.6),
         name='Test Data',
-        hovertemplate='実測値: %{x:.2f}<br>予測値: %{y:.2f}<extra></extra>'
+        customdata=np.column_stack([store_names, cities, cuisine_types, store_clusters, cuisine_clusters, 
+                                     num_seats, avg_population, dinner_price, lunch_price, 
+                                     is_family, is_friend, is_alone]),
+        hovertemplate='<b>RST_TITLE:</b> %{customdata[0]}<br>' +
+                      '<b>CITY:</b> %{customdata[1]}<br>' +
+                      '<b>CUISINE_CAT_origin:</b> %{customdata[2]}<br>' +
+                      '<b>store_cluster:</b> %{customdata[3]}<br>' +
+                      '<b>cuisine_cluster_id:</b> %{customdata[4]}<br>' +
+                      '<b>NUM_SEATS:</b> %{customdata[5]:.0f}<br>' +
+                      '<b>AVG_MONTHLY_POPULATION:</b> %{customdata[6]:,.0f}<br>' +
+                      '<b>DINNER_PRICE:</b> %{customdata[7]:,.0f}円<br>' +
+                      '<b>LUNCH_PRICE:</b> %{customdata[8]:,.0f}円<br>' +
+                      '<b>IS_FAMILY_FRIENDLY:</b> %{customdata[9]:.0f}<br>' +
+                      '<b>IS_FRIEND_FRIENDLY:</b> %{customdata[10]:.0f}<br>' +
+                      '<b>IS_ALONE_FRIENDLY:</b> %{customdata[11]:.0f}<br>' +
+                      '<b>actual:</b> %{x:,.1f}本/月<br>' +
+                      '<b>predicted:</b> %{y:,.1f}本/月<br>' +
+                      '<b>error:</b> %{text:,.1f}本/月<extra></extra>',
+        text=y_test_original - lgb_pred_test
     ),
     row=1, col=1
 )
@@ -425,7 +460,24 @@ fig_lgb.add_trace(
         mode='markers',
         marker=dict(size=5, color='green', opacity=0.6),
         name='APE',
-        hovertemplate='実測値: %{x:.2f}<br>APE: %{y:.2f}%<extra></extra>'
+        customdata=np.column_stack([store_names, cities, cuisine_types, store_clusters, cuisine_clusters, 
+                                     num_seats, avg_population, dinner_price, lunch_price, 
+                                     is_family, is_friend, is_alone, lgb_pred_test]),
+        hovertemplate='<b>RST_TITLE:</b> %{customdata[0]}<br>' +
+                      '<b>CITY:</b> %{customdata[1]}<br>' +
+                      '<b>CUISINE_CAT_origin:</b> %{customdata[2]}<br>' +
+                      '<b>store_cluster:</b> %{customdata[3]}<br>' +
+                      '<b>cuisine_cluster_id:</b> %{customdata[4]}<br>' +
+                      '<b>NUM_SEATS:</b> %{customdata[5]:.0f}<br>' +
+                      '<b>AVG_MONTHLY_POPULATION:</b> %{customdata[6]:,.0f}<br>' +
+                      '<b>DINNER_PRICE:</b> %{customdata[7]:,.0f}円<br>' +
+                      '<b>LUNCH_PRICE:</b> %{customdata[8]:,.0f}円<br>' +
+                      '<b>IS_FAMILY_FRIENDLY:</b> %{customdata[9]:.0f}<br>' +
+                      '<b>IS_FRIEND_FRIENDLY:</b> %{customdata[10]:.0f}<br>' +
+                      '<b>IS_ALONE_FRIENDLY:</b> %{customdata[11]:.0f}<br>' +
+                      '<b>actual:</b> %{x:,.1f}本/月<br>' +
+                      '<b>predicted:</b> %{customdata[12]:,.1f}本/月<br>' +
+                      '<b>APE:</b> %{y:.2f}%<extra></extra>'
     ),
     row=2, col=1
 )
@@ -448,11 +500,11 @@ fig_lgb.add_trace(
 )
 
 # レイアウト更新
-fig_lgb.update_xaxes(title_text="実測値 (円)", row=1, col=1)
-fig_lgb.update_yaxes(title_text="予測値 (円)", row=1, col=1)
-fig_lgb.update_xaxes(title_text="売上 (円)", row=1, col=2)
+fig_lgb.update_xaxes(title_text="実測値 (本/月)", row=1, col=1)
+fig_lgb.update_yaxes(title_text="予測値 (本/月)", row=1, col=1)
+fig_lgb.update_xaxes(title_text="売上 (本/月)", row=1, col=2)
 fig_lgb.update_yaxes(title_text="頻度", row=1, col=2)
-fig_lgb.update_xaxes(title_text="実測値 (円)", row=2, col=1)
+fig_lgb.update_xaxes(title_text="実測値 (本/月)", row=2, col=1)
 fig_lgb.update_yaxes(title_text="絶対パーセント誤差 (%)", row=2, col=1)
 fig_lgb.update_xaxes(title_text="重要度 (Gain)", row=2, col=2)
 fig_lgb.update_yaxes(title_text="特徴量", row=2, col=2)
@@ -481,7 +533,25 @@ fig_rf.add_trace(
         mode='markers',
         marker=dict(size=5, color='blue', opacity=0.6),
         name='Test Data',
-        hovertemplate='実測値: %{x:.2f}<br>予測値: %{y:.2f}<extra></extra>'
+        customdata=np.column_stack([store_names, cities, cuisine_types, store_clusters, cuisine_clusters, 
+                                     num_seats, avg_population, dinner_price, lunch_price, 
+                                     is_family, is_friend, is_alone]),
+        hovertemplate='<b>RST_TITLE:</b> %{customdata[0]}<br>' +
+                      '<b>CITY:</b> %{customdata[1]}<br>' +
+                      '<b>CUISINE_CAT_origin:</b> %{customdata[2]}<br>' +
+                      '<b>store_cluster:</b> %{customdata[3]}<br>' +
+                      '<b>cuisine_cluster_id:</b> %{customdata[4]}<br>' +
+                      '<b>NUM_SEATS:</b> %{customdata[5]:.0f}<br>' +
+                      '<b>AVG_MONTHLY_POPULATION:</b> %{customdata[6]:,.0f}<br>' +
+                      '<b>DINNER_PRICE:</b> %{customdata[7]:,.0f}円<br>' +
+                      '<b>LUNCH_PRICE:</b> %{customdata[8]:,.0f}円<br>' +
+                      '<b>IS_FAMILY_FRIENDLY:</b> %{customdata[9]:.0f}<br>' +
+                      '<b>IS_FRIEND_FRIENDLY:</b> %{customdata[10]:.0f}<br>' +
+                      '<b>IS_ALONE_FRIENDLY:</b> %{customdata[11]:.0f}<br>' +
+                      '<b>actual:</b> %{x:,.1f}本/月<br>' +
+                      '<b>predicted:</b> %{y:,.1f}本/月<br>' +
+                      '<b>error:</b> %{text:,.1f}本/月<extra></extra>',
+        text=y_test_original - rf_pred_test
     ),
     row=1, col=1
 )
@@ -526,7 +596,24 @@ fig_rf.add_trace(
         mode='markers',
         marker=dict(size=5, color='green', opacity=0.6),
         name='APE',
-        hovertemplate='実測値: %{x:.2f}<br>APE: %{y:.2f}%<extra></extra>'
+        customdata=np.column_stack([store_names, cities, cuisine_types, store_clusters, cuisine_clusters, 
+                                     num_seats, avg_population, dinner_price, lunch_price, 
+                                     is_family, is_friend, is_alone, rf_pred_test]),
+        hovertemplate='<b>RST_TITLE:</b> %{customdata[0]}<br>' +
+                      '<b>CITY:</b> %{customdata[1]}<br>' +
+                      '<b>CUISINE_CAT_origin:</b> %{customdata[2]}<br>' +
+                      '<b>store_cluster:</b> %{customdata[3]}<br>' +
+                      '<b>cuisine_cluster_id:</b> %{customdata[4]}<br>' +
+                      '<b>NUM_SEATS:</b> %{customdata[5]:.0f}<br>' +
+                      '<b>AVG_MONTHLY_POPULATION:</b> %{customdata[6]:,.0f}<br>' +
+                      '<b>DINNER_PRICE:</b> %{customdata[7]:,.0f}円<br>' +
+                      '<b>LUNCH_PRICE:</b> %{customdata[8]:,.0f}円<br>' +
+                      '<b>IS_FAMILY_FRIENDLY:</b> %{customdata[9]:.0f}<br>' +
+                      '<b>IS_FRIEND_FRIENDLY:</b> %{customdata[10]:.0f}<br>' +
+                      '<b>IS_ALONE_FRIENDLY:</b> %{customdata[11]:.0f}<br>' +
+                      '<b>actual:</b> %{x:,.1f}本/月<br>' +
+                      '<b>predicted:</b> %{customdata[12]:,.1f}本/月<br>' +
+                      '<b>APE:</b> %{y:.2f}%<extra></extra>'
     ),
     row=2, col=1
 )
@@ -549,11 +636,11 @@ fig_rf.add_trace(
 )
 
 # レイアウト更新
-fig_rf.update_xaxes(title_text="実測値 (円)", row=1, col=1)
-fig_rf.update_yaxes(title_text="予測値 (円)", row=1, col=1)
-fig_rf.update_xaxes(title_text="売上 (円)", row=1, col=2)
+fig_rf.update_xaxes(title_text="実測値 (本/月)", row=1, col=1)
+fig_rf.update_yaxes(title_text="予測値 (本/月)", row=1, col=1)
+fig_rf.update_xaxes(title_text="売上 (本/月)", row=1, col=2)
 fig_rf.update_yaxes(title_text="頻度", row=1, col=2)
-fig_rf.update_xaxes(title_text="実測値 (円)", row=2, col=1)
+fig_rf.update_xaxes(title_text="実測値 (本/月)", row=2, col=1)
 fig_rf.update_yaxes(title_text="絶対パーセント誤差 (%)", row=2, col=1)
 fig_rf.update_xaxes(title_text="重要度", row=2, col=2)
 fig_rf.update_yaxes(title_text="特徴量", row=2, col=2)
@@ -565,6 +652,24 @@ fig_rf.write_html(os.path.join(results_folder, 'random_forest_analysis.html'))
 feature_importance_lgb.to_csv(os.path.join(results_folder, 'feature_importance_lightgbm.csv'), index=False, encoding='utf-8-sig')
 feature_importance_rf.to_csv(os.path.join(results_folder, 'feature_importance_random_forest.csv'), index=False, encoding='utf-8-sig')
 
+# stores_with_cluster.csvに予測値を追加
+print("\n" + "=" * 100)
+print("【stores_with_cluster.csvに予測値を追加しています...】")
+print("=" * 100)
+
+# 元のstores_with_cluster.csvを読み込む
+stores_df = pd.read_csv('final_store_clustering_results/stores_with_cluster.csv')
+print(f"  元のデータ形状: {stores_df.shape}")
+
+# 予測値を追加（全データの予測値を使用）
+stores_df['lgb_predicted'] = lgb_pred_all
+stores_df['rf_predicted'] = rf_pred_all
+
+# 保存
+stores_df.to_csv('final_store_clustering_results/stores_with_cluster.csv', index=False, encoding='utf-8-sig')
+print(f"  予測値追加後のデータ形状: {stores_df.shape}")
+print(f"  保存完了: final_store_clustering_results/stores_with_cluster.csv")
+
 print("\n" + "=" * 100)
 print("【完了】")
 print("=" * 100)
@@ -575,5 +680,7 @@ print("  3. lightgbm_analysis.html - LightGBM分析グラフ（2x2サブプロ�
 print("  4. random_forest_analysis.html - Random Forest分析グラフ（2x2サブプロット）")
 print("  5. feature_importance_lightgbm.csv - LightGBM特徴量重要度")
 print("  6. feature_importance_random_forest.csv - Random Forest特徴量重要度")
+print("\n更新されたファイル:")
+print("  - final_store_clustering_results/stores_with_cluster.csv (予測値追加: lgb_predicted, rf_predicted)")
 print("\n" + "=" * 100)
 
